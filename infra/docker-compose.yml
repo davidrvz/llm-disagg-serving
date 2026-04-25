@@ -1,0 +1,63 @@
+version: "3.9"
+
+# Shared Python build context — all services come from the same image
+x-python-base: &python-base
+  build:
+    context: ..
+    dockerfile: infra/Dockerfile
+  env_file: ../.env
+  volumes:
+    - huggingface-cache:/root/.cache/huggingface
+
+services:
+  router:
+    <<: *python-base
+    command: uvicorn router.main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    environment:
+      PREFILL_URLS: "http://prefill:8001"
+      DECODE_URLS: "http://decode:8002"
+    depends_on:
+      prefill:
+        condition: service_healthy
+      decode:
+        condition: service_healthy
+
+  prefill:
+    <<: *python-base
+    command: uvicorn workers.prefill.server:app --host 0.0.0.0 --port 8001
+    ports:
+      - "8001:8001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s  # GPT-2 download can take a moment
+
+  decode:
+    <<: *python-base
+    command: uvicorn workers.decode.server:app --host 0.0.0.0 --port 8002
+    ports:
+      - "8002:8002"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  ui:
+    build:
+      context: ../ui
+      dockerfile: ../infra/Dockerfile.ui
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_ROUTER_URL: "http://localhost:8000"
+    depends_on:
+      - router
+
+volumes:
+  huggingface-cache:

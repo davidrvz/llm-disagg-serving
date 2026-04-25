@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+dist/
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+
+# Env
+.env
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Node / Next.js
+ui/node_modules/
+ui/.next/
+ui/out/
+
+# HuggingFace cache (don't commit model weights)
+.cache/
+
+# macOS
+.DS_Store
