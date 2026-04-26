@@ -38,7 +38,15 @@ Separating them lets you scale each independently and eliminates GPU contention 
 - [ ] deploy prefill worker to GPU instance (A10 or L4 on Lambda Labs / RunPod)
 - [ ] deploy decode worker separately
 - [ ] measure real network KV transfer cost vs collocated baseline
-- [ ] swap GPT-2 for a larger model (Llama 3.2 1B or 3B)
+- [ ] swap GPT-2 for a larger model (Llama 3.2 1B or 3B) or Gemma 4
+
+### phase 4 — microVM workers (Firecracker)
+- [ ] run each worker as a Firecracker microVM on a Linux host (Lambda Labs / RunPod)
+- [ ] mount model weights as a shared read-only block device across VMs
+- [ ] measure VM boot time vs. warm worker; characterize cold-start overhead
+- [ ] experiment with Firecracker snapshots: snapshot prefill VM post-load, restore per request to skip weight loading
+- [ ] measure KV transfer cost over TAP network interface vs. localhost baseline
+- [ ] stretch: boot a fresh prefill VM per request, shut it down after — true serverless disagg
 
 ## session log
 
