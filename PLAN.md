@@ -22,7 +22,7 @@ Separating them lets you scale each independently and eliminates GPU contention 
 - [x] scaffold complete
 - [x] PLAN.md in place
 - [x] implement prefill worker: tokenize prompt → forward pass → extract + serialize KV cache
-- [ ] implement decode worker: receive KV cache → autoregressive decode → stream tokens
+- [x] implement decode worker: receive KV cache → autoregressive decode → stream tokens
 - [ ] implement router: accept request → call prefill → pass KV to decode → stream response
 - [ ] wire up with docker-compose, verify end-to-end on Mac
 - [ ] basic Next.js UI: chat input, streaming token output
@@ -54,8 +54,16 @@ Separating them lets you scale each independently and eliminates GPU contention 
 - created `.venv` and installed project deps via `pip install -e ".[dev]"`
 - smoke test passes: 12 KV layers, ~680 KB serialized, last hidden `(seq_len, 768)` on MPS
 
+### session 3
+- introduced `workers/config.py`: `MODEL_NAME` (from `MODEL_NAME` env var, default `"gpt2"`) and `select_device()` — single source of truth for both workers; switching models is `MODEL_NAME=google/gemma-... python -m ...`
+- swapped both workers from `GPT2LMHeadModel` to `AutoModelForCausalLM` — any HuggingFace CausalLM now works without code changes
+- implemented `DecodeWorker.decode_stream()`: sync generator, one token per yield, passes `past_key_values` back each step for O(1) per-step cost; `decode()` wraps it
+- fixed `kv_transfer/serializer.deserialize_kv_cache()` to return a `DynamicCache` (transformers ≥ 4.47 requires this; plain tuples caused `AttributeError: 'tuple' has no get_seq_length`)
+- fixed `workers/prefill/server.py` stale 3-value unpack (prefill now returns 4 values)
+- end-to-end smoke test passes: prefill → serialize → deserialize → streaming decode, 40 tokens on MPS
+
 ## current focus
-Phase 1 — implement the decode worker (workers/decode/worker.py)
+Phase 1 — implement the router (router/main.py)
 
 ## key decisions / notes
 - using GPT-2 to start: small enough to run on CPU, real transformer architecture, easy to swap out

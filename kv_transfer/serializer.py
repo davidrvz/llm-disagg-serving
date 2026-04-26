@@ -19,29 +19,26 @@ import pickle
 from typing import Any
 
 import torch
+from transformers.cache_utils import DynamicCache
 
 
-def serialize_kv_cache(past_key_values: tuple[tuple[torch.Tensor, ...], ...]) -> str:
-    """Serialize a HuggingFace past_key_values tuple to a base64 string.
+def serialize_kv_cache(past_key_values: Any) -> str:
+    """Serialize a HuggingFace past_key_values cache to a base64 string.
 
-    Parameters
-    ----------
-    past_key_values:
-        A tuple of (key, value) tensor pairs, one per transformer layer,
-        as returned by any HuggingFace CausalLM with use_cache=True.
+    Accepts both the legacy tuple-of-2-tuples format and the newer
+    DynamicCache object (transformers ≥ 4.47, which iterates as 3-tuples).
+    Only key and value tensors are preserved; any extra fields are dropped.
 
     Returns
     -------
     str
         Base64-encoded pickle blob safe to embed in JSON.
 
-    TODO: Move tensors to CPU before serializing if they live on GPU/MPS.
     TODO: Profile and replace pickle with a faster binary format.
     """
     buf = io.BytesIO()
-    # Index by position rather than unpacking so this works with both the
-    # legacy tuple-of-2-tuples format and the newer DynamicCache iteration
-    # that yields 3-tuples (key, value, None) in transformers ≥ 4.47.
+    # Index by position ([0], [1]) rather than unpacking so this works with
+    # both 2-tuple and 3-tuple (key, value, None) iteration formats.
     cpu_kv = tuple(
         (item[0].detach().cpu(), item[1].detach().cpu()) for item in past_key_values
     )
@@ -52,8 +49,8 @@ def serialize_kv_cache(past_key_values: tuple[tuple[torch.Tensor, ...], ...]) ->
 def deserialize_kv_cache(
     kv_cache_b64: str,
     device: str = "cpu",
-) -> tuple[tuple[torch.Tensor, ...], ...]:
-    """Deserialize a base64 string back into a past_key_values tuple.
+) -> DynamicCache:
+    """Deserialize a base64 string back into a DynamicCache.
 
     Parameters
     ----------
@@ -64,13 +61,14 @@ def deserialize_kv_cache(
 
     Returns
     -------
-    tuple[tuple[torch.Tensor, torch.Tensor], ...]
-        Ready to pass as past_key_values to a HuggingFace model.
+    DynamicCache
+        Ready to pass as past_key_values to any HuggingFace CausalLM.
 
-    TODO: Skip the copy when device=="cpu" (tensors are already on CPU).
+    TODO: Skip the device copy when device=="cpu" (tensors are already there).
     """
     raw = base64.b64decode(kv_cache_b64.encode("ascii"))
-    cpu_kv: Any = pickle.loads(raw)  # noqa: S301
-    return tuple(
-        (k.to(device), v.to(device)) for k, v in cpu_kv
-    )
+    cpu_kv: list[tuple[torch.Tensor, torch.Tensor]] = pickle.loads(raw)  # noqa: S301
+    cache = DynamicCache()
+    for layer_idx, (k, v) in enumerate(cpu_kv):
+        cache.update(k.to(device), v.to(device), layer_idx=layer_idx)
+    return cache

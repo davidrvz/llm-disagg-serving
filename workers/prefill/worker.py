@@ -3,51 +3,42 @@ Prefill worker: tokenize the prompt and run a single forward pass to populate
 the KV cache.  The resulting cache is serialized and handed off to a decode
 worker — the prefill GPU never touches autoregressive decoding.
 
-Model: GPT-2 (runs on CPU/MPS, easy to swap for any CausalLM).
+Model is controlled by the MODEL_NAME env var (see workers/config.py).
 """
 
 from __future__ import annotations
 
 import logging
 import sys
-from typing import TYPE_CHECKING
 
 import torch
-from transformers import AutoTokenizer, GPT2LMHeadModel
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers.modeling_utils import PreTrainedModel
 
 from kv_transfer.serializer import deserialize_kv_cache, serialize_kv_cache
-
-if TYPE_CHECKING:
-    from transformers.modeling_outputs import CausalLMOutputWithCrossAttentions
+from workers.config import MODEL_NAME, select_device
 
 logger = logging.getLogger(__name__)
-
-MODEL_NAME = "gpt2"
-
-
-def select_device() -> str:
-    """Return the best available device: MPS on Mac, otherwise CPU."""
-    if torch.backends.mps.is_available():
-        return "mps"
-    return "cpu"
 
 
 class PrefillWorker:
     def __init__(self, device: str | None = None) -> None:
         self.device = device or select_device()
-        self.model: GPT2LMHeadModel | None = None
+        self.model: PreTrainedModel | None = None
         self.tokenizer = None
 
-    def load(self) -> None:
-        """Download (or load from cache) GPT-2 weights and move to device.
+    def load(self, model_name: str = MODEL_NAME) -> None:
+        """Download (or load from cache) model weights and move to device.
 
-        TODO: Accept model_name as a config param so this swaps to any
-              HuggingFace CausalLM (Llama, Mistral, …) without code changes.
+        Accepts an explicit model_name override so the server can pass one in
+        at startup without re-importing this module.
+
         TODO: Use bfloat16 on CUDA/MPS to cut memory in half.
+        TODO: Add quantization support for larger models.
         """
-        logger.info("Loading %s on %s …", MODEL_NAME, self.device)
-        self.tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-        self.model = GPT2LMHeadModel.from_pretrained(MODEL_NAME).to(self.device)
+        logger.info("Loading %s on %s …", model_name, self.device)
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.model = AutoModelForCausalLM.from_pretrained(model_name).to(self.device)
         self.model.eval()
         logger.info("Model ready.")
 
@@ -79,20 +70,18 @@ class PrefillWorker:
         input_ids: list[int] = inputs["input_ids"][0].tolist()
 
         # use_cache=True  → past_key_values populated
-        # output_hidden_states=True → hidden_states tuple populated (one per layer + embedding)
-        output: CausalLMOutputWithCrossAttentions = self.model(
+        # output_hidden_states=True → hidden_states tuple populated
+        output = self.model(
             **inputs,
             use_cache=True,
             output_hidden_states=True,
         )
 
-        # past_key_values: tuple of (key, value) per layer
-        past_key_values = output.past_key_values  # type: ignore[assignment]
-        kv_cache_b64 = serialize_kv_cache(past_key_values)
+        kv_cache_b64 = serialize_kv_cache(output.past_key_values)
 
-        # hidden_states[-1]: final transformer layer output, shape (1, seq_len, hidden_size)
-        # Squeeze batch dim and move to CPU so callers don't need to know the worker device.
-        last_hidden_state: torch.Tensor = output.hidden_states[-1][0].cpu()  # type: ignore[index]
+        # hidden_states[-1]: final transformer layer, shape (1, seq_len, hidden_size)
+        # Squeeze batch dim and move to CPU so callers are device-agnostic.
+        last_hidden_state: torch.Tensor = output.hidden_states[-1][0].cpu()
 
         return kv_cache_b64, input_ids, len(input_ids), last_hidden_state
 
@@ -107,10 +96,10 @@ if __name__ == "__main__":
 
     kv_b64, input_ids, n_tokens, last_hidden = worker.prefill(prompt)
 
-    # Round-trip the KV cache through deserialize to catch any serialization bugs.
     kv = deserialize_kv_cache(kv_b64, device="cpu")
 
     print(f"\nPrompt        : {prompt!r}")
+    print(f"Model         : {MODEL_NAME}")
     print(f"Device        : {worker.device}")
     print(f"Prompt tokens : {n_tokens}")
     print(f"Input IDs     : {input_ids}")

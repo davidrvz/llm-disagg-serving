@@ -31,7 +31,7 @@ async def prefill(req: PrefillRequest) -> PrefillResponse:
           event loop is not blocked during the forward pass.
     TODO: Add request queuing / backpressure when the GPU is saturated.
     """
-    kv_cache_b64, input_ids, prompt_tokens = worker.prefill(req.prompt)
+    kv_cache_b64, input_ids, prompt_tokens, _ = worker.prefill(req.prompt)
     return PrefillResponse(
         request_id=req.request_id,
         kv_cache_b64=kv_cache_b64,
