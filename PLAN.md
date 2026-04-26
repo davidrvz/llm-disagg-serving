@@ -23,7 +23,7 @@ Separating them lets you scale each independently and eliminates GPU contention 
 - [x] PLAN.md in place
 - [x] implement prefill worker: tokenize prompt → forward pass → extract + serialize KV cache
 - [x] implement decode worker: receive KV cache → autoregressive decode → stream tokens
-- [ ] implement router: accept request → call prefill → pass KV to decode → stream response
+- [x] implement router: accept request → call prefill → pass KV to decode → stream response
 - [ ] wire up with docker-compose, verify end-to-end on Mac
 - [ ] basic Next.js UI: chat input, streaming token output
 
@@ -70,8 +70,14 @@ Separating them lets you scale each independently and eliminates GPU contention 
 - fixed `workers/prefill/server.py` stale 3-value unpack (prefill now returns 4 values)
 - end-to-end smoke test passes: prefill → serialize → deserialize → streaming decode, 40 tokens on MPS
 
+### session 4
+- implemented `router/main.py`: shared `httpx.AsyncClient` via lifespan, non-streaming JSON path, SSE streaming proxy path, `GET /config` endpoint (returns model name + worker URLs for UI)
+- updated `workers/prefill/server.py`: lifespan, single-threaded `ThreadPoolExecutor` so the forward pass doesn't block the event loop
+- updated `workers/decode/server.py`: same executor pattern, plus `POST /decode/stream` SSE endpoint — sync generator runs in the executor, emits `data: <token>\n\n` per token, `data: [DONE]\n\n` at end
+- router streams by proxying the decode SSE stream; prepends a `[META]` event with prompt_tokens and worker identities
+
 ## current focus
-Phase 1 — implement the router (router/main.py)
+Phase 1 — docker-compose wiring + end-to-end smoke test
 
 ## key decisions / notes
 - using GPT-2 to start: small enough to run on CPU, real transformer architecture, easy to swap out
