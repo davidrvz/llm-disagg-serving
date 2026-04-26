@@ -24,7 +24,7 @@ Separating them lets you scale each independently and eliminates GPU contention 
 - [x] implement prefill worker: tokenize prompt → forward pass → extract + serialize KV cache
 - [x] implement decode worker: receive KV cache → autoregressive decode → stream tokens
 - [x] implement router: accept request → call prefill → pass KV to decode → stream response
-- [ ] wire up with docker-compose, verify end-to-end on Mac
+- [x] wire up with docker-compose, verify end-to-end on Mac
 - [ ] basic Next.js UI: chat input, streaming token output
 
 ### phase 2 — true disagg + observability
