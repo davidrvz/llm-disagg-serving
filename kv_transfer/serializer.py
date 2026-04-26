@@ -39,9 +39,11 @@ def serialize_kv_cache(past_key_values: tuple[tuple[torch.Tensor, ...], ...]) ->
     TODO: Profile and replace pickle with a faster binary format.
     """
     buf = io.BytesIO()
-    # Detach and move to CPU so the bytes are portable across workers
+    # Index by position rather than unpacking so this works with both the
+    # legacy tuple-of-2-tuples format and the newer DynamicCache iteration
+    # that yields 3-tuples (key, value, None) in transformers ≥ 4.47.
     cpu_kv = tuple(
-        (k.detach().cpu(), v.detach().cpu()) for k, v in past_key_values
+        (item[0].detach().cpu(), item[1].detach().cpu()) for item in past_key_values
     )
     pickle.dump(cpu_kv, buf)
     return base64.b64encode(buf.getvalue()).decode("ascii")

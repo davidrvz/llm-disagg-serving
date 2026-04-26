@@ -19,9 +19,9 @@ Separating them lets you scale each independently and eliminates GPU contention 
 ## phases
 
 ### phase 1 — local MVP (current)
-- [ ] scaffold complete (done)
-- [ ] PLAN.md in place (done)
-- [ ] implement prefill worker: tokenize prompt → forward pass → extract + serialize KV cache
+- [x] scaffold complete
+- [x] PLAN.md in place
+- [x] implement prefill worker: tokenize prompt → forward pass → extract + serialize KV cache
 - [ ] implement decode worker: receive KV cache → autoregressive decode → stream tokens
 - [ ] implement router: accept request → call prefill → pass KV to decode → stream response
 - [ ] wire up with docker-compose, verify end-to-end on Mac
@@ -48,8 +48,14 @@ Separating them lets you scale each independently and eliminates GPU contention 
 - stubs in place with docstrings and TODOs throughout
 - created PLAN.md
 
+### session 2
+- implemented `workers/prefill/worker.py`: `select_device()` (MPS → CPU), `PrefillWorker.load()`, `PrefillWorker.prefill()` — returns serialized KV cache, input IDs, token count, and last hidden state
+- fixed `kv_transfer/serializer.py` to handle transformers ≥ 4.47 `DynamicCache` iteration (3-tuples instead of 2-tuples)
+- created `.venv` and installed project deps via `pip install -e ".[dev]"`
+- smoke test passes: 12 KV layers, ~680 KB serialized, last hidden `(seq_len, 768)` on MPS
+
 ## current focus
-Phase 1 — implement the prefill worker (workers/prefill/worker.py)
+Phase 1 — implement the decode worker (workers/decode/worker.py)
 
 ## key decisions / notes
 - using GPT-2 to start: small enough to run on CPU, real transformer architecture, easy to swap out
