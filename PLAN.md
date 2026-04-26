@@ -76,8 +76,13 @@ Separating them lets you scale each independently and eliminates GPU contention 
 - updated `workers/decode/server.py`: same executor pattern, plus `POST /decode/stream` SSE endpoint — sync generator runs in the executor, emits `data: <token>\n\n` per token, `data: [DONE]\n\n` at end
 - router streams by proxying the decode SSE stream; prepends a `[META]` event with prompt_tokens and worker identities
 
+### session 5
+- docker-compose.yml and Dockerfile were already in place; created `.env` with `MODEL_NAME=gpt2` for env var propagation
+- created `experiments/test_e2e.py`: smoke test script that hits health/config/non-streaming/streaming endpoints in sequence; run after `docker compose -f infra/docker-compose.yml up --build`
+- verified all imports and route registration; ready for full stack test on actual Docker infra
+
 ## current focus
-Phase 1 — docker-compose wiring + end-to-end smoke test
+Phase 1 — basic Next.js UI (chat input, streaming token output)
 
 ## key decisions / notes
 - using GPT-2 to start: small enough to run on CPU, real transformer architecture, easy to swap out
