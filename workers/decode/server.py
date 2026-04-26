@@ -71,17 +71,19 @@ async def decode_stream(req: DecodeRequest) -> StreamingResponse:
     The sync generator runs inside a single-threaded executor so GPU ops
     never block the event loop and always run on the same thread.
     """
+    _done = object()
+
     async def event_stream() -> AsyncGenerator[str, None]:
         loop = asyncio.get_running_loop()
         gen = worker.decode_stream(
             req.kv_cache_b64, req.input_ids, req.max_new_tokens, req.temperature
         )
-        try:
-            while True:
-                token = await loop.run_in_executor(_executor, next, gen)
-                yield f"data: {token}\n\n"
-        except StopIteration:
-            yield "data: [DONE]\n\n"
+        while True:
+            token = await loop.run_in_executor(_executor, next, gen, _done)
+            if token is _done:
+                break
+            yield f"data: {token}\n\n"
+        yield "data: [DONE]\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 

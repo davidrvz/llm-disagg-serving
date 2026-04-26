@@ -34,7 +34,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 30s  # GPT-2 download can take a moment
+      start_period: 120s  # first run downloads model weights
 
   decode:
     <<: *python-base

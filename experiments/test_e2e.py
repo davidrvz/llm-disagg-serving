@@ -84,7 +84,8 @@ def test_streaming() -> None:
     }
     with httpx.stream("POST", f"{ROUTER_URL}/generate", json=payload, timeout=TIMEOUT) as resp:
         assert resp.status_code == 200, f"Got {resp.status_code}: {resp.text}"
-        assert resp.headers.get("content-type") == "text/event-stream"
+        ct = resp.headers.get("content-type", "")
+        assert "text/event-stream" in ct, f"Expected text/event-stream, got {ct!r}"
 
         token_count = 0
         full_text = ""
